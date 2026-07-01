@@ -1,56 +1,80 @@
+<div align="center">
+
 # Marketa-Pro
 
-> Multi-agent AI platform that automates e-commerce content strategy for Chinese brands and KOL teams.
+**A multi-agent prototype that turns a product brief into a marketing content strategy for Chinese e-commerce platforms.**
 
-## What is this?
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![Framework](https://img.shields.io/badge/framework-Google%20ADK-4285F4)
+![Status](https://img.shields.io/badge/status-prototype-orange)
 
-Marketa-Pro transforms a product brief into a complete, platform-optimized marketing content package for Xiaohongshu, Douyin/TikTok, and Taobao. It orchestrates specialized AI agents -- trend research, campaign planning, and content strategy synthesis -- to replace the sequential handoff between trend researcher, content strategist, copywriter, and campaign manager, executing in minutes rather than days.
+</div>
 
-## Why?
+---
 
-I noticed that my sister's marketing agency spent the majority of its time on repetitive content operations: researching platform trends, decomposing campaign goals into briefs, and adapting messaging for different KOL personas across platforms. Small and mid-size Chinese brands -- the majority of sellers on these platforms -- cannot afford the 5-10 person content teams needed to keep pace with weekly trend shifts.
+## What it is
 
-## How it works
+Chinese e-commerce brands sell through content: Xiaohongshu posts, Douyin/TikTok videos, Taobao product stories, and KOL collaborations. Producing that content means researching platform trends, turning a campaign goal into briefs, and adapting the message per platform and audience. Small brands and the agencies that serve them repeat this cycle for every product launch.
 
-Marketa-Pro uses a layered multi-agent architecture built on Google's Agent Development Kit (ADK):
+Marketa-Pro is an experiment in automating that pipeline with role-specialized AI agents. You give it a product brief (title, selling points, platform, brand tone, audience, goal) and it produces a trend read, a campaign plan, and a combined content strategy map. It was written against the workflow of a real marketing agency (the author's sister's), and it is an early prototype: the planning layer runs, but most of the larger platform is still a design on paper.
 
-1. **Orchestrator Agent**: Receives user input (product title, selling points, platform, brand tone, audience, campaign goal) and manages the full execution chain with task state tracking and graceful degradation on individual agent failures.
-2. **Trend Radar Agent**: Analyzes platform-specific trends using a FunctionTool pattern -- trending topics, hashtags, content format performance, and optimal posting windows for Xiaohongshu, TikTok, or generic platforms.
-3. **Campaign Planner Agent**: Decomposes goals into structured strategy: objectives, audience personas, messaging pillars, content flow, platform customization, brand voice rules, and measurement signals.
-4. **Content Strategy Map Agent**: Synthesizes trend analysis and campaign plan into a unified execution roadmap with content pillars, calendar, performance metrics, and resource allocation.
+## Agent design
 
-All agents use LiteLLM through OpenRouter for model-agnostic routing (Gemini Pro 1.5 default, swappable per-agent). The system runs in two modes: programmatic via `main.py` or interactive through ADK's built-in web UI on port 8000.
+The system is built on Google's Agent Development Kit (ADK). Four agents each wrap a single ADK `Agent` (LLM plus role instruction), an async `Runner`, and an in-memory session:
 
-## Key Technical Highlights
+- **Orchestrator** takes the brief and runs the pipeline, tracking each task through status phases (`initiated`, `campaign_planning_completed`, `trend_analysis_completed`, `content_strategy_completed`) in a `task_states` dictionary.
+- **Trend Radar** analyzes platform trends. It registers a `FunctionTool` that the LLM calls to fetch trend data (topics, hashtags, format performance, posting windows) for Xiaohongshu, TikTok, or a generic default.
+- **Campaign Planner** turns the goal and product into a seven-section strategy (objectives, audience, messaging pillars, content flow, platform customization, brand voice, measurement).
+- **Content Strategy Map** merges the plan and the trends into one execution roadmap (pillars, calendar, metrics, resource allocation).
 
-- **Graceful Pipeline Degradation**: Individual agent failures are caught and logged but never halt the pipeline -- if trend analysis fails, the strategy map agent operates on campaign plan data alone.
-- **Model-Agnostic Agent Design**: LiteLLM + OpenRouter abstraction allows per-agent model selection (cheaper Flash for formatting, capable Pro for strategy), swappable with a single config change.
-- **Structured Prompting as Agent Contract**: Each agent's instruction prompt defines explicit markdown-section output formats, creating a soft schema that downstream agents reliably parse without brittle JSON extraction.
+The design idea from the project docs is to mirror how a content team hands work down a line (trend researcher to strategist to writer), with each agent's markdown-section output acting as a loose contract the next agent reads. The docs also sketch a cross-border ("going global") direction with a localization knowledge base and RAG, plus a "text micro-tuner" refiner agent for guided edits. None of that is built yet.
 
-## Tech Stack
+Two honest caveats about the current code:
 
-| Layer | Technology |
-|-------|-----------|
-| Language | Python 3.11+ |
-| Agent Framework | Google ADK (Agent Development Kit) |
-| Model Routing | LiteLLM + OpenRouter |
-| Default LLM | Gemini Pro 1.5 |
-| Async | asyncio |
-| Config | python-dotenv |
-| Database (planned) | PostgreSQL (Supabase) |
-| Payments (planned) | Stripe |
+- The orchestrator sequences the agents in Python in a fixed order. It does not use an LLM to decide the route, and its own agent output is computed but not used for any decision. So this is a fixed pipeline of role-specialized LLM calls, not an autonomous loop.
+- The Trend Radar tool returns hardcoded simulated data. It is structured to be swapped for a real crawler or API later, but today it does not fetch anything live.
 
-## Quick Start
+Models are routed through LiteLLM to OpenRouter, defaulting to Gemini Pro 1.5. Changing the model is a one-line edit in `utils/config.py`.
+
+## Quick start
+
+Requires Python 3.11+ and an OpenRouter API key.
 
 ```bash
-git clone https://github.com/gushizhi/Marketa-Pro.git
-cd Marketa-Pro
-pip install google-adk python-dotenv litellm
-cp .env.example .env            # Add OPENROUTER_API_KEY
-python main.py                  # Run full pipeline
-bash run_web.sh                 # Or launch ADK web UI on port 8000
+git clone https://github.com/shizhigu/marketa-pro.git
+cd marketa-pro
+pip install -r requirements.txt
+
+# create a .env file with your key
+echo "OPENROUTER_API_KEY=sk-or-..." > .env
+
+python main.py        # run the planning pipeline on a built-in example brief
+bash run_web.sh       # or open the ADK web UI on http://localhost:8000
 ```
+
+`main.py` runs the orchestrator against a sample "smart thermos cup" brief. `run_web.sh` launches ADK's web UI, which discovers the `SequentialAgent` in `agents/workflow/marketa_workflow.py`.
+
+## Status
+
+Built and runnable:
+
+- Orchestrator, Trend Radar, Campaign Planner, and Content Strategy Map agents
+- Sequential pipeline with task-state tracking and degradation when trend analysis fails
+- LiteLLM/OpenRouter routing
+- ADK web workflow entry point
+- Standalone test scripts per agent (`test_*.py`)
+
+Designed but not implemented:
+
+- Real trend crawlers behind the Trend Radar tool
+- Content generation, execution, and monitoring layers (copywriter, image, KOL brief, publishing, feedback)
+- Localization knowledge base and RAG for cross-border campaigns
+- A refiner/micro-tuner agent
+- Persistence: `db.sql` defines a Postgres schema (users, projects, tasks, outputs, feedback, subscriptions) but no code reads or writes it
+- Any web API, frontend, or billing
+
+`PROJECT_BRIEF.md` and `architecture.md` hold the fuller product thinking.
 
 ## License
 
-MIT
+No license file is included, so no usage rights are granted by default. Add a LICENSE before reuse.
